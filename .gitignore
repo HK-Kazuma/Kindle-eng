@@ -1,0 +1,6 @@
+.env
+__pycache__/
+*.pyc
+error.log
+anki_output.csv
+highlights.txt
