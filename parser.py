@@ -1,4 +1,5 @@
 import re
+import unicodedata
 
 import pandas as pd
 
@@ -11,6 +12,7 @@ def is_word(text: str) -> bool:
 
 
 def normalize(text: str) -> str:
+    text = unicodedata.normalize('NFKC', text)
     return STRIP_PUNCT.sub("", text).strip().lower()
 
 
@@ -62,9 +64,14 @@ def extract_words_from_text(text: str) -> list[dict]:
     フォーマット:
         [ハイライトしたテキスト]
         [色]のハイライト | 位置: [N]オプション
+
+    「のハイライト」行の直前にある行だけを実際のハイライトとして確定する。
+    これにより、ページ上の本タイトル・章タイトル・UI文字を除外できる。
     """
     seen: set[str] = set()
     results: list[dict] = []
+
+    current_candidate: str | None = None
     in_memo = False
 
     for line in text.splitlines():
@@ -72,25 +79,28 @@ def extract_words_from_text(text: str) -> list[dict]:
         if not stripped:
             continue
 
+        # のハイライト行 → 直前の候補を正式なハイライトとして確定
         if HIGHLIGHT_LINE.match(stripped):
+            if current_candidate:
+                key = normalize(current_candidate)
+                if key and key not in seen and is_word(key):
+                    seen.add(key)
+                    results.append({"word": key, "context": ""})
+            current_candidate = None
             in_memo = False
             continue
 
+        # メモ開始行
         if stripped.startswith("メモ"):
             in_memo = True
             continue
 
+        # メモ内容はスキップ（current_candidateは保持したまま）
         if in_memo:
             continue
 
-        key = normalize(stripped)
-        if not key or key in seen:
-            continue
-        if not is_word(key):
-            continue
-
-        seen.add(key)
-        results.append({"word": key, "context": ""})
+        # ハイライト候補として保持（次の行が来れば上書きされる）
+        current_candidate = stripped
 
     return results
 
